@@ -10,7 +10,7 @@ import signal
 import threading
 
 # --- Configuration ---
-ADC_CHANNEL = 2   # *** Set the channel to read from ***
+ADC_CHANNEL = 6   # *** Set the channel to read from ***
 VREF = 5.0          # *** IMPORTANT: Set this to the ACTUAL measured Vref voltage of your ADS1256 board! ***
 ADC_GAIN = ADS1256.ADS1256_GAIN_E['ADS1256_GAIN_1'] # Set Gain to 1 (adjust if needed)
 # Choose a data rate (e.g., 1000 SPS)

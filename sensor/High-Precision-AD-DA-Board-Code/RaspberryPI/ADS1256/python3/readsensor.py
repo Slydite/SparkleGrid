@@ -14,11 +14,11 @@ import signal
 import threading
 
 # --- Configuration ---
-ADC_CHANNEL = 2   # Channel to read from
+ADC_CHANNEL = 6   # Channel to read from
 VREF = 5.0          # *** IMPORTANT: Set this to the ACTUAL measured Vref voltage! ***
 ADC_GAIN = ADS1256.ADS1256_GAIN_E['ADS1256_GAIN_1'] # Gain 1
-ADC_RATE_ENUM = ADS1256.ADS1256_DRATE_E['ADS1256_1000SPS'] # 1000 SPS Rate
-ADC_SAMPLE_RATE_HZ = 1000 # Corresponding sample rate in Hz (MUST match ADC_RATE_ENUM)
+ADC_RATE_ENUM = ADS1256.ADS1256_DRATE_E['ADS1256_100SPS'] # 1000 SPS Rate
+ADC_SAMPLE_RATE_HZ = 100 # Corresponding sample rate in Hz (MUST match ADC_RATE_ENUM)
 
 # --- Database Configuration ---
 DB_HOST = "localhost"
@@ -166,7 +166,7 @@ def adc_sampler_thread():
         if raw_value is not None:
             # Convert raw ADC value to voltage (using explicit max count)
             voltage = (raw_value / max_adc_count) * VREF if VREF != 0 else 0.0
-            #logging.info(f"Read Raw={raw_value}, V={voltage:.4f}") # Uncomment for deep debug
+            logging.info(f"Read Raw={raw_value}, V={voltage:.4f}") # Uncomment for deep debug
 
             try:
                 # Put (timestamp, voltage) tuple onto the queue
@@ -239,7 +239,7 @@ def database_writer_thread(db_connection):
              )
              if success:
                  pass
-                 logging.info(f"DB Write: ID {current_db_id}, Samples: {len(sensdata_for_db)}, StartTime: {batch_start_time.time()}")
+                 #logging.info(f"DB Write: ID {current_db_id}, Samples: {len(sensdata_for_db)}, StartTime: {batch_start_time.time()}")
              else:
                  logging.error(f"DB Write failed for batch starting at {batch_start_time}")
                  current_db_id -= 1

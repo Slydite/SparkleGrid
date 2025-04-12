@@ -38,6 +38,12 @@ SENSORS_CONFIG = [
         'name': 'Voltage Sensor Ch6', 
         'type': 'Voltage'             
     },
+    {
+        'channel':4,
+        'sensor_id':3,
+        'name':'Voltage Sensor Ch4',
+        'type':'Voltage'
+    }
     # --- Add more sensors here if needed ---
     # {
     #     'channel': 0,
