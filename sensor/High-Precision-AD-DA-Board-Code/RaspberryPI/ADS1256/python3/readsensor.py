@@ -14,11 +14,15 @@ import signal
 import threading
 
 # --- Configuration ---
-ADC_CHANNEL = 6   # Channel to read from
-VREF = 5.0          # *** IMPORTANT: Set this to the ACTUAL measured Vref voltage! ***
+ADC_CHANNEL = 2   # Channel to read from
+VREF = 5.065          # *** IMPORTANT: Set this to the ACTUAL measured Vref voltage! ***
 ADC_GAIN = ADS1256.ADS1256_GAIN_E['ADS1256_GAIN_1'] # Gain 1
 ADC_RATE_ENUM = ADS1256.ADS1256_DRATE_E['ADS1256_100SPS'] # 1000 SPS Rate
 ADC_SAMPLE_RATE_HZ = 100 # Corresponding sample rate in Hz (MUST match ADC_RATE_ENUM)
+# --- Calibration Values ---
+MEASURED_GAIN = 759.1  # Use your average measured gain
+MEASURED_OFFSET_V = -1.348 # Use your average measured offset in Volts (already negative)
+DATASHEET_OFFSET_V = 1.5  # Datasheet specified 1.5V offset
 
 # --- Database Configuration ---
 DB_HOST = "localhost"
@@ -164,9 +168,16 @@ def adc_sampler_thread():
         # ---------------------------------------------------
 
         if raw_value is not None:
-            # Convert raw ADC value to voltage (using explicit max count)
-            voltage = (raw_value / max_adc_count) * VREF if VREF != 0 else 0.0
-            logging.info(f"Read Raw={raw_value}, V={voltage:.4f}") # Uncomment for deep debug
+           # Convert raw ADC value to voltage
+            max_adc_count = 0x7FFFFF # 8388607.0
+            # --- Calibrated Voltage Calculation (with datasheet and measured offsets/gain) ---
+            voltage_raw = (raw_value / max_adc_count) * VREF  # Raw voltage from ADC
+            voltage_biased = voltage_raw - DATASHEET_OFFSET_V # Subtract 1.5V datasheet offset
+            voltage_scaled = voltage_biased / MEASURED_GAIN    # Apply gain correction
+            voltage_calibrated = voltage_scaled - MEASURED_OFFSET_V # Apply measured offset correction
+            voltage = voltage_calibrated # Use calibrated voltage
+
+            logging.info(f"Channel {ADC_CHANNEL}: Raw = {raw_value:8d}, Voltage = {voltage: 9.5f} V (Calibrated)") # Indicate "Calibrated" in log
 
             try:
                 # Put (timestamp, voltage) tuple onto the queue

@@ -39,7 +39,7 @@ ALLOWED_HOSTS = []
 
 
 INSTALLED_APPS = [
-    'GridSense', # Updated app name if needed, keeping as GridSense as per apps.py
+    'GridSense_Cloud', # Updated app name if needed, keeping as GridSense as per apps.py
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     'corsheaders' ,
     'django_extensions',
     "graphene_django",
-    "rest_framework", # Added graphene_django here as it was in microback/settings.py
+    
 ]
 
 MIDDLEWARE = [
@@ -64,7 +64,7 @@ MIDDLEWARE = [
 ]
 CORS_ALLOW_ALL_ORIGINS = True  # In production, set this to False and use CORS_ALLOWED_ORIGINS
 
-ROOT_URLCONF = 'GridSense.urls' # Updated project name in ROOT_URLCONF
+ROOT_URLCONF = 'GridSense_CLoud.urls' # Updated project name in ROOT_URLCONF
 
 TEMPLATES = [
     {
@@ -82,7 +82,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'GridSense.wsgi.application' # Updated project name in WSGI_APPLICATION
+WSGI_APPLICATION = 'GridSense_Cloud.wsgi.application' # Updated project name in WSGI_APPLICATION
 
 
 # Database

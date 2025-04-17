@@ -8,30 +8,29 @@ import sys
 import logging
 import signal
 import threading
+import numpy as np  # <-- Import numpy
 
 # --- Configuration ---
-ADC_CHANNEL = 2   # *** Set the channel to read from ***
-VREF = 5.0          # *** IMPORTANT: Set this to the ACTUAL measured Vref voltage of your ADS1256 board! ***
-ADC_GAIN = ADS1256.ADS1256_GAIN_E['ADS1256_GAIN_1'] # Set Gain to 1 (adjust if needed)
-# Choose a data rate (e.g., 1000 SPS)
+ADC_CHANNEL = 2
+VREF = 5.065  # *** IMPORTANT: SET THIS TO THE MEASURED VREF!!! ***
+ADC_GAIN = ADS1256.ADS1256_GAIN_E['ADS1256_GAIN_1']
 ADC_RATE_ENUM = ADS1256.ADS1256_DRATE_E['ADS1256_1000SPS']
-#ADC_RATE_HZ = 1000 # Corresponding approximate sample rate
+
+# --- Calibration Values ---
+MEASURED_GAIN = 759.1  # <--- START WITH GAIN = 1, we will test different values
+MEASURED_OFFSET_V = -1.348 # Your measured offset -  KEEP COMMENTED OUT INITIALLY
+DATASHEET_OFFSET_V = 1.5 # Datasheet specified 1.5V offset
 
 # How often to read and print (seconds)
 READ_INTERVAL = 0.1 # Read 10 times per second
-
-# --- Calibration Values ---
-MEASURED_GAIN = 759.1  # Use your average measured gain
-MEASURED_OFFSET_V = -1.348 # Use your average measured offset in Volts (already negative)
-DATASHEET_OFFSET_V = 1.5  # Datasheet specified 1.5V offset
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- Global Variables ---
-stop_event = threading.Event() # Using threading Event for cleaner signal handling
-ADC = None # ADC object holder
+stop_event = threading.Event()
+ADC = None
 
 # --- Signal Handler ---
 def signal_handler(sig, frame):
@@ -42,16 +41,13 @@ def signal_handler(sig, frame):
 if __name__ == "__main__":
     logging.info(f"Starting ADS1256 reader for Channel {ADC_CHANNEL}...")
 
-    # Register signal handlers for graceful exit
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
     try:
-        # 1. Initialize ADC Hardware using the library
         ADC = ADS1256.ADS1256()
         if ADC.ADS1256_init() != 0:
-            logging.critical("Failed to initialize ADS1256 hardware via ADS1256_init(). Exiting.")
-            # Attempt cleanup even on init fail
+            logging.critical("Failed to initialize ADS1256 hardware. Exiting.")
             try:
                  if 'config' in sys.modules and hasattr(config, 'module_exit'):
                      config.module_exit()
@@ -61,53 +57,51 @@ if __name__ == "__main__":
         logging.info("ADS1256 hardware initialized successfully.")
         logging.warning(f"Using VREF = {VREF}V for voltage calculation. Ensure this is correct!")
 
-        # 2. Configure ADC Gain and Rate (Optional, but good practice)
-        # Note: ADS1256_init might set defaults, this explicitly sets them.
         if not ADC.ADS1256_ConfigADC(ADC_GAIN, ADC_RATE_ENUM):
              logging.critical("Failed to configure ADC Gain/Rate. Exiting.")
-             raise RuntimeError("ADC Configuration Failed") # Raise exception to trigger finally block
+             raise RuntimeError("ADC Configuration Failed")
         gain_str = [k for k, v in ADS1256.ADS1256_GAIN_E.items() if v == ADC_GAIN][0]
         rate_str = [k for k, v in ADS1256.ADS1256_DRATE_E.items() if v == ADC_RATE_ENUM][0]
         logging.info(f"ADC Configured: Gain={gain_str}, Rate={rate_str}")
 
-
-        # 3. Reading Loop
         logging.info(f"Starting continuous readings from Channel {ADC_CHANNEL}. Press Ctrl+C to stop.")
+
+        voltage_batch = [] # List to store voltage readings for RMS calculation
+        max_adc_count = 0x7FFFFF # 8388607.0
+
         while not stop_event.is_set():
             read_start_time = time.monotonic()
 
-            # Get the raw ADC value for the specified channel
-            # ADS1256_GetChannalValue handles setting the MUX, SYNC, WAKEUP, and Read Data
             raw_value = ADC.ADS1256_GetChannalValue(ADC_CHANNEL)
 
             if raw_value is not None:
-                # Convert raw ADC value to voltage
-                # ADS1256 is 24-bit, max positive value is 0x7FFFFF for +VREF input
-                # Formula: voltage = (raw_adc / (2^23 - 1)) * Vref / Gain
-                # Since Gain is 1 here, we simplify:
-                # Convert raw ADC value to voltage
-                max_adc_count = 0x7FFFFF # 8388607.0
-                # --- Calibrated Voltage Calculation (with datasheet and measured offsets/gain) ---
-                voltage_raw = (raw_value / max_adc_count) * VREF  # Raw voltage from ADC
-                voltage_biased = voltage_raw - DATASHEET_OFFSET_V # Subtract 1.5V datasheet offset
-                voltage_scaled = voltage_biased / MEASURED_GAIN    # Apply gain correction
-                voltage_calibrated = voltage_scaled - MEASURED_OFFSET_V # Apply measured offset correction
-                voltage = voltage_calibrated # Use calibrated voltage
+                # --- Calibrated Voltage Calculation ---
+                voltage_raw = (raw_value / max_adc_count) * VREF
+                voltage_biased = voltage_raw - DATASHEET_OFFSET_V
+                voltage_scaled = voltage_biased / MEASURED_GAIN
+                voltage_calibrated = voltage_scaled - MEASURED_OFFSET_V
+                voltage = voltage_raw
+                logging.info(f"Channel {ADC_CHANNEL}: Raw = {raw_value:8d}, Voltage = {voltage: 9.5f} (unCalibrated)")
 
-                logging.info(f"Channel {ADC_CHANNEL}: Raw = {raw_value:8d}, Voltage = {voltage: 9.5f} V (Calibrated)") # Indicate "Calibrated" in log
+
+                voltage_batch.append(voltage) # Add voltage to batch list
+                logging.info(f"Channel {ADC_CHANNEL}: Raw = {raw_value:8d}, Voltage = {voltage: 9.5f} V (unCalibrated)")
 
             else:
-                # ADS1256_GetChannalValue returned None, likely due to DRDY timeout
                 logging.warning(f"Failed to read ADC channel {ADC_CHANNEL} (returned None)")
-                # Add a small delay if errors are frequent to avoid spamming
                 time.sleep(0.5)
 
-            # --- Calculate sleep time for target interval ---
+            # --- RMS Calculation and Logging (after collecting a batch) ---
+            if len(voltage_batch) >= 100: # Process batch of 100 samples
+                voltage_array = np.array(voltage_batch)
+                rms_voltage = np.sqrt(np.mean(np.square(voltage_array)))
+                logging.info(f"uncalibrated RMS Voltage (Batch of {len(voltage_batch)}): {rms_voltage:.6f} V")
+                voltage_batch = [] # Clear batch for next set of readings
+
+
             read_end_time = time.monotonic()
             elapsed_time = read_end_time - read_start_time
             sleep_time = max(0, READ_INTERVAL - elapsed_time)
-
-            # Use event wait for interruptible sleep
             stop_event.wait(sleep_time)
 
 
@@ -119,10 +113,8 @@ if __name__ == "__main__":
         logging.critical(f"An unhandled exception occurred: {e}", exc_info=True)
 
     finally:
-        # 4. Cleanup hardware resources
         logging.info("Cleaning up hardware resources...")
         try:
-            # Check if config module was imported and has the function
             if 'config' in sys.modules and hasattr(config, 'module_exit'):
                  config.module_exit()
                  logging.info("Hardware resources released via config.module_exit().")
