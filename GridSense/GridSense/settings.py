@@ -48,7 +48,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders' ,
     'django_extensions',
-    "graphene_django", # Added graphene_django here as it was in microback/settings.py
+    "graphene_django",
+    "rest_framework", # Added graphene_django here as it was in microback/settings.py
 ]
 
 MIDDLEWARE = [
